@@ -18,37 +18,75 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
-        InitializeComponent();
-        DistroGrid.ItemsSource = _distros;
+        try
+        {
+            InitializeComponent();
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(@"C:\WslBackupManager_error.log", "InitializeComponent failed: " + ex);
+            throw;
+        }
 
-        RefreshButton.Click += async (_, _) => await LoadDistrosAsync();
-        ShutdownAllButton.Click += async (_, _) => await RunSimpleCommandAsync("--shutdown", LocalizationManager.ShutdownOk);
-        BackupButton.Click += async (_, _) => await BackupSelectedAsync();
-        RestoreButton.Click += async (_, _) => await RestoreSelectedAsync();
-        OpenBackupFolderButton.Click += (_, _) => OpenFolder(BackupRootTextBox.Text);
-        OpenInstallFolderButton.Click += (_, _) => OpenFolder(InstallRootTextBox.Text);
-        DistroGrid.SelectionChanged += (_, _) => SyncSelection();
+        try
+        {
+            DistroGrid.ItemsSource = _distros;
 
-        // Language selector
-        LangSelector.Items.Add(LocalizationManager.T("LangEN"));
-        LangSelector.Items.Add(LocalizationManager.T("LangTC"));
-        LangSelector.Items.Add(LocalizationManager.T("LangSC"));
-        LangSelector.SelectedIndex = 1;
-        LangSelector.SelectionChanged += (_, _) =>
+            RefreshButton.Click += async (_, _) => await LoadDistrosAsync();
+            ShutdownAllButton.Click += async (_, _) => await RunSimpleCommandAsync("--shutdown", LocalizationManager.ShutdownOk);
+            BackupButton.Click += async (_, _) => await BackupSelectedAsync();
+            RestoreButton.Click += async (_, _) => await RestoreSelectedAsync();
+            OpenBackupFolderButton.Click += (_, _) => OpenFolder(BackupRootTextBox.Text);
+            OpenInstallFolderButton.Click += (_, _) => OpenFolder(InstallRootTextBox.Text);
+            DistroGrid.SelectionChanged += (_, _) => SyncSelection();
+
+            // Language selector - populate without triggering event
+            LangSelector.SelectionChanged -= OnLangSelectorChanged;
+            LangSelector.Items.Add(LocalizationManager.T("LangEN"));
+            LangSelector.Items.Add(LocalizationManager.T("LangTC"));
+            LangSelector.Items.Add(LocalizationManager.T("LangSC"));
+            LangSelector.SelectedIndex = 1;
+            LangSelector.SelectionChanged += OnLangSelectorChanged;
+
+            Loaded += OnWindowLoaded;
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(@"C:\WslBackupManager_error.log", "Constructor failed: " + ex);
+            throw;
+        }
+    }
+
+    private void OnLangSelectorChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        try
         {
             LocalizationManager.CurrentLang = (LocalizationManager.Language)LangSelector.SelectedIndex;
             RefreshUIText();
-        };
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(@"C:\WslBackupManager_error.log", "OnLangSelectorChanged failed: " + ex);
+        }
+    }
 
-        Loaded += async (_, _) =>
+    private async void OnWindowLoaded(object sender, RoutedEventArgs e)
+    {
+        try
         {
             RefreshUIText();
             await LoadDistrosAsync();
-        };
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(@"C:\WslBackupManager_error.log", "OnWindowLoaded failed: " + ex);
+        }
     }
 
     private void RefreshUIText()
     {
+        try
+        {
         // Update window title and header
         TitleText.Text = LocalizationManager.AppTitle;
         SubtitleText.Text = LocalizationManager.AppSubtitle;
@@ -97,6 +135,12 @@ public partial class MainWindow : Window
         foreach (var item in items) _distros.Add(item);
 
         SetStatus(LocalizationManager.Ready);
+        }
+        catch (Exception ex)
+        {
+            System.IO.File.WriteAllText(@"C:\WslBackupManager_error.log", "RefreshUIText failed: " + ex);
+            SetStatus("UI init error: " + ex.Message);
+        }
     }
 
     private void OnLangChanged(object? sender, PropertyChangedEventArgs e)
