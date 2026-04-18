@@ -128,6 +128,8 @@ public static class LocalizationManager
     public static string Ready        => T("Ready");
     public static string NoBackup     => T("NoBackup");
     public static string Loading      => T("Loading");
+    public static string SelectFirst  => T("SelectFirst");
+    public static string NoBackupFound => T("NoBackupFound");
     public static string ShutdownOk   => T("ShutdownOk");
     public static string Running       => T("Running");
     public static string Stopped       => T("Stopped");
