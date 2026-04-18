@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
@@ -21,14 +22,87 @@ public partial class MainWindow : Window
         DistroGrid.ItemsSource = _distros;
 
         RefreshButton.Click += async (_, _) => await LoadDistrosAsync();
-        ShutdownAllButton.Click += async (_, _) => await RunSimpleCommandAsync("--shutdown", "所有 WSL 已停止。");
+        ShutdownAllButton.Click += async (_, _) => await RunSimpleCommandAsync("--shutdown", LocalizationManager.ShutdownOk);
         BackupButton.Click += async (_, _) => await BackupSelectedAsync();
         RestoreButton.Click += async (_, _) => await RestoreSelectedAsync();
         OpenBackupFolderButton.Click += (_, _) => OpenFolder(BackupRootTextBox.Text);
         OpenInstallFolderButton.Click += (_, _) => OpenFolder(InstallRootTextBox.Text);
         DistroGrid.SelectionChanged += (_, _) => SyncSelection();
 
-        Loaded += async (_, _) => await LoadDistrosAsync();
+        // Language selector
+        LangSelector.Items.Add(LocalizationManager.T("LangEN"));
+        LangSelector.Items.Add(LocalizationManager.T("LangTC"));
+        LangSelector.Items.Add(LocalizationManager.T("LangSC"));
+        LangSelector.SelectedIndex = 1;
+        LangSelector.SelectionChanged += (_, _) =>
+        {
+            LocalizationManager.CurrentLang = (LocalizationManager.Language)LangSelector.SelectedIndex;
+            RefreshUIText();
+        };
+
+        Loaded += async (_, _) =>
+        {
+            RefreshUIText();
+            await LoadDistrosAsync();
+        };
+    }
+
+    private void RefreshUIText()
+    {
+        // Update window title and header
+        TitleText.Text = LocalizationManager.AppTitle;
+        SubtitleText.Text = LocalizationManager.AppSubtitle;
+
+        // Header buttons
+        RefreshButton.Content = LocalizationManager.Refresh;
+        ShutdownAllButton.Content = LocalizationManager.ShutdownAll;
+
+        // Language selector items
+        var savedLang = LangSelector.SelectedIndex;
+        LangSelector.Items.Clear();
+        LangSelector.Items.Add(LocalizationManager.T("LangEN"));
+        LangSelector.Items.Add(LocalizationManager.T("LangTC"));
+        LangSelector.Items.Add(LocalizationManager.T("LangSC"));
+        LangSelector.SelectedIndex = savedLang;
+
+        // Left panel
+        ConfigTitle.Text = LocalizationManager.Config;
+        ConfigDesc.Text = LocalizationManager.ConfigDesc;
+        BackupRootLabel.Text = LocalizationManager.BackupRoot;
+        InstallRootLabel.Text = LocalizationManager.InstallRoot;
+        BackupFormatLabel.Text = LocalizationManager.BackupFormat;
+        SelectedDistroLabel.Text = LocalizationManager.SelectedDistro;
+        BackupButton.Content = LocalizationManager.BackupNow;
+        RestoreButton.Content = LocalizationManager.Restore;
+        OpenBackupFolderButton.Content = LocalizationManager.OpenBackupFolder;
+        OpenInstallFolderButton.Content = LocalizationManager.OpenInstallFolder;
+
+        // Right panel
+        WslListTitle.Text = LocalizationManager.WslInstances;
+        WslListDesc.Text = LocalizationManager.WslInstancesDesc;
+
+        // DataGrid column headers
+        if (DistroGrid.Columns.Count >= 5)
+        {
+            DistroGrid.Columns[0].Header = LocalizationManager.ColName;
+            DistroGrid.Columns[1].Header = LocalizationManager.ColState;
+            DistroGrid.Columns[2].Header = LocalizationManager.ColVersion;
+            DistroGrid.Columns[3].Header = LocalizationManager.ColLatestBackup;
+            DistroGrid.Columns[4].Header = LocalizationManager.ColInstallPath;
+        }
+
+        // Refresh the distro list to re-localize state values
+        var items = _distros.ToList();
+        _distros.Clear();
+        foreach (var item in items) _distros.Add(item);
+
+        SetStatus(LocalizationManager.Ready);
+    }
+
+    private void OnLangChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        LocalizationManager.StaticPropertyChanged -= OnLangChanged;
+        RefreshUIText();
     }
 
     private void SyncSelection()
@@ -41,45 +115,81 @@ public partial class MainWindow : Window
     {
         try
         {
-            SetStatus("正在讀取 WSL 列表...");
+            SetStatus(LocalizationManager.Loading);
             var basic = await RunWslCaptureAsync("-l -q");
             var verbose = await RunWslCaptureAsync("-l -v");
 
-            var names = basic.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                             .Select(x => x.Trim())
-                             .Where(x => !string.IsNullOrWhiteSpace(x))
-                             .ToList();
+            // Parse basic list - remove BOM, filter strictly
+            var rawNames = basic
+                .Replace("\uFEFF", "")  // Remove BOM
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x) && x.Length > 1)
+                .ToList();
+
+            // Also filter out common header-like lines (in any language)
+            var headerKeywords = new[] { "name", "名稱", "名称", "NAME", "wsl", "linux" };
+            rawNames = rawNames.Where(n => !headerKeywords.Any(h => n.Equals(h, StringComparison.OrdinalIgnoreCase))).ToList();
+
             var map = ParseVerbose(verbose);
 
             _distros.Clear();
-            foreach (var name in names)
+            foreach (var name in rawNames)
             {
                 map.TryGetValue(name, out var detail);
                 var installPath = Path.Combine(InstallRootTextBox.Text, SafeName(name));
                 var latest = GetLatestBackup(name);
+
+                string displayState;
+                if (detail?.State != null)
+                {
+                    displayState = NormalizeState(detail.State);
+                }
+                else
+                {
+                    displayState = LocalizationManager.Unknown;
+                }
+
                 _distros.Add(new DistroInfo
                 {
                     Name = name,
-                    State = detail?.State ?? "Unknown",
+                    State = displayState,
                     Version = detail?.Version ?? 0,
                     InstallPath = installPath,
                     LatestBackupFile = latest?.FullName,
-                    LatestBackupDisplay = latest == null ? "尚無備份" : $"{latest.Name} ({Math.Round(latest.Length / 1024d / 1024d, 2)} MB)"
+                    LatestBackupDisplay = latest == null
+                        ? LocalizationManager.NoBackup
+                        : $"{latest.Name} ({Math.Round(latest.Length / 1024d / 1024d, 2)} MB)"
                 });
             }
-            SetStatus($"已載入 {_distros.Count} 個 WSL 實例。");
+            SetStatus(LocalizationManager.T("Loaded", _distros.Count));
         }
         catch (Exception ex)
         {
-            SetStatus($"讀取失敗：{ex.Message}");
+            SetStatus(LocalizationManager.T("LoadFailed", ex.Message));
         }
+    }
+
+    private static string NormalizeState(string state)
+    {
+        // Normalize state to localized display
+        var s = state.Trim().ToLowerInvariant();
+        if (s.Contains("running") || s.Contains("正在執行") || s.Contains("正在运行"))
+            return LocalizationManager.Running;
+        if (s.Contains("stopped") || s.Contains("已停止"))
+            return LocalizationManager.Stopped;
+        if (s.Contains("installing") || s.Contains("正在安裝") || s.Contains("正在安装"))
+            return LocalizationManager.T("ColState"); // "Installing"
+        if (s.Contains("uninstalling") || s.Contains("正在解除安裝") || s.Contains("正在卸载"))
+            return LocalizationManager.T("ColState"); // "Uninstalling"
+        return state;
     }
 
     private async Task BackupSelectedAsync()
     {
         if (DistroGrid.SelectedItem is not DistroInfo item)
         {
-            SetStatus("請先選擇一個 WSL。");
+            SetStatus(LocalizationManager.SelectFirst);
             return;
         }
 
@@ -89,20 +199,24 @@ public partial class MainWindow : Window
         var ext = useVhd ? "vhdx" : "tar";
         var target = Path.Combine(BackupRootTextBox.Text, SafeName(item.Name), $"{SafeName(item.Name)}-{stamp}.{ext}");
 
-        var confirm = MessageBox.Show($"確定備份 {item.Name} 到\n{target} ?", "確認備份", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        var confirm = MessageBox.Show(
+            LocalizationManager.T("BackupConfirmMsg", item.Name, target),
+            LocalizationManager.T("ConfirmBackup"),
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
         if (confirm != MessageBoxResult.Yes) return;
 
         try
         {
-            SetStatus($"正在備份 {item.Name} ...");
+            SetStatus(LocalizationManager.T("Backupping", item.Name));
             await RunWslCaptureAsync("--shutdown");
             await RunWslCaptureAsync(useVhd ? $"--export \"{item.Name}\" \"{target}\" --vhd" : $"--export \"{item.Name}\" \"{target}\"");
-            SetStatus($"備份完成：{target}");
+            SetStatus(LocalizationManager.T("BackupSuccess", target));
             await LoadDistrosAsync();
         }
         catch (Exception ex)
         {
-            SetStatus($"備份失敗：{ex.Message}");
+            SetStatus(LocalizationManager.T("BackupFailed", ex.Message));
         }
     }
 
@@ -110,42 +224,42 @@ public partial class MainWindow : Window
     {
         if (DistroGrid.SelectedItem is not DistroInfo item)
         {
-            SetStatus("請先選擇一個 WSL。");
+            SetStatus(LocalizationManager.SelectFirst);
             return;
         }
 
         var backup = GetLatestBackup(item.Name);
         if (backup == null)
         {
-            SetStatus("找不到最新備份，無法還原。");
+            SetStatus(LocalizationManager.NoBackupFound);
             return;
         }
 
         var installPath = Path.Combine(InstallRootTextBox.Text, SafeName(item.Name));
-        var msg = $"即將還原 {item.Name}\n\n來源：{backup.FullName}\n目標：{installPath}\n\n這會先 unregister 現有同名 WSL。";
-        var confirm = MessageBox.Show(msg, "確認還原", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        var msg = LocalizationManager.T("RestoreConfirmMsg", item.Name, backup.FullName, installPath);
+        var confirm = MessageBox.Show(msg, LocalizationManager.T("ConfirmRestore"), MessageBoxButton.YesNo, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.Yes) return;
 
         try
         {
-            SetStatus($"正在還原 {item.Name} ...");
+            SetStatus(LocalizationManager.T("Restoring", item.Name));
             await RunWslCaptureAsync("--shutdown");
             await RunWslCaptureAsync($"--unregister \"{item.Name}\"");
 
             if (Directory.Exists(installPath))
                 Directory.Delete(installPath, true);
-            Directory.CreateDirectory(InstallRootTextBox.Text);
+            Directory.CreateDirectory(installPath);
 
             var importArgs = backup.Extension.Equals(".vhdx", StringComparison.OrdinalIgnoreCase) || backup.Extension.Equals(".vhd", StringComparison.OrdinalIgnoreCase)
                 ? $"--import \"{item.Name}\" \"{installPath}\" \"{backup.FullName}\" --vhd"
                 : $"--import \"{item.Name}\" \"{installPath}\" \"{backup.FullName}\" --version 2";
             await RunWslCaptureAsync(importArgs);
-            SetStatus($"還原完成：{item.Name}");
+            SetStatus(LocalizationManager.T("RestoreSuccess", item.Name));
             await LoadDistrosAsync();
         }
         catch (Exception ex)
         {
-            SetStatus($"還原失敗：{ex.Message}");
+            SetStatus(LocalizationManager.T("RestoreFailed", ex.Message));
         }
     }
 
@@ -163,23 +277,39 @@ public partial class MainWindow : Window
     private static Dictionary<string, VerboseInfo> ParseVerbose(string text)
     {
         var map = new Dictionary<string, VerboseInfo>(StringComparer.OrdinalIgnoreCase);
-        foreach (var raw in text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+
+        // Remove BOM
+        var clean = text.Replace("\uFEFF", "");
+        var lines = clean.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var raw in lines)
         {
-            var line = raw.TrimStart('*', ' ').Trim();
-            if (string.IsNullOrWhiteSpace(line) || line.StartsWith("NAME", StringComparison.OrdinalIgnoreCase))
-                continue;
-            var m = Regex.Match(line, "^(.*?)\\s{2,}(Running|Stopped|Installing|Uninstalling)\\s+(\\d+)$");
+            var line = raw.TrimStart('*', ' ', '\u200B' /* zero-width space */).Trim();
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            // Skip header lines (NAME header row or localized equivalents)
+            if (Regex.IsMatch(line, @"^(name|名稱|NAME)\s+", RegexOptions.IgnoreCase)) continue;
+
+            // Skip pure header separator lines like "------------------------------"
+            if (Regex.IsMatch(line, @"^[-─═\u2550\u2500]{3,}$")) continue;
+
+            // Try multiple patterns: "NAME   STATE   VERSION" (English)
+            // and localized versions with various whitespace
+            // The key insight: state is always a single word, version is the last number
+            var m = Regex.Match(line, @"^(.+?)\s{2,}(\S+)\s+(\d+)\s*$");
             if (!m.Success) continue;
-            map[m.Groups[1].Value.Trim()] = new VerboseInfo
+
+            var name = m.Groups[1].Value.Trim();
+            var state = m.Groups[2].Value.Trim();
+            if (int.TryParse(m.Groups[3].Value.Trim(), out var version))
             {
-                State = m.Groups[2].Value.Trim(),
-                Version = int.Parse(m.Groups[3].Value.Trim())
-            };
+                map[name] = new VerboseInfo { State = state, Version = version };
+            }
         }
         return map;
     }
 
-    private static string SafeName(string name) => Regex.Replace(name, "[^A-Za-z0-9._-]", "_");
+    private static string SafeName(string name) => Regex.Replace(name, "[^A-Za-z0-9._\u4e00-\u9fff-]", "_");
 
     private async Task RunSimpleCommandAsync(string args, string okMessage)
     {
@@ -191,7 +321,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            SetStatus($"操作失敗：{ex.Message}");
+            SetStatus(LocalizationManager.T("OperationFailed", ex.Message));
         }
     }
 
@@ -204,7 +334,9 @@ public partial class MainWindow : Window
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
         };
 
         using var process = new Process { StartInfo = psi };

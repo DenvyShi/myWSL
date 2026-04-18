@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="WSL Backup Manager" Height="760" Width="1280" MinWidth="1080" MinHeight="680"
+        Title="WSL 備份管理工具" Height="760" Width="1280" MinWidth="1080" MinHeight="680"
         WindowStartupLocation="CenterScreen" Background="#F4F7FB">
     <Grid Margin="20">
         <Grid.RowDefinitions>
@@ -13,6 +13,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!-- Header -->
         <Border Grid.Row="0" CornerRadius="18" Padding="24" Background="White" BorderBrush="#D8E0EE" BorderThickness="1" Margin="0,0,0,16">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -20,17 +21,19 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock Text="WSL Backup Manager" FontSize="28" FontWeight="SemiBold" Foreground="#172033"/>
-                    <TextBlock Margin="0,8,0,0" Foreground="#5B6780" FontSize="14"
-                               Text="可視化查看 WSL 名稱、狀態、版本與最新備份，並直接在桌面應用中執行備份與還原。"/>
+                    <TextBlock x:Name="TitleText" FontSize="28" FontWeight="SemiBold" Foreground="#172033"/>
+                    <TextBlock x:Name="SubtitleText" Margin="0,8,0,0" Foreground="#5B6780" FontSize="14" TextWrapping="Wrap"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Name="RefreshButton" Content="刷新列表" Width="110" Height="38" Margin="0,0,10,0"/>
-                    <Button Name="ShutdownAllButton" Content="停止全部WSL" Width="120" Height="38"/>
+                    <!-- Language selector -->
+                    <ComboBox x:Name="LangSelector" Width="60" Height="36" Margin="0,0,16,0" FontSize="13"/>
+                    <Button x:Name="RefreshButton" Width="110" Height="38" Margin="0,0,10,0"/>
+                    <Button x:Name="ShutdownAllButton" Width="120" Height="38"/>
                 </StackPanel>
             </Grid>
         </Border>
 
+        <!-- Body -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="340"/>
@@ -38,36 +41,37 @@
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
+            <!-- Left: Config panel -->
             <Border Grid.Column="0" CornerRadius="18" Padding="20" Background="White" BorderBrush="#D8E0EE" BorderThickness="1">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
-                        <TextBlock Text="配置" FontSize="22" FontWeight="SemiBold" Foreground="#172033"/>
-                        <TextBlock Margin="0,8,0,18" TextWrapping="Wrap" Foreground="#5B6780"
-                                   Text="設定備份目錄、安裝目錄與預設備份格式。後續也可加上排程備份。"/>
+                        <TextBlock x:Name="ConfigTitle" FontSize="22" FontWeight="SemiBold" Foreground="#172033"/>
+                        <TextBlock x:Name="ConfigDesc" Margin="0,8,0,18" TextWrapping="Wrap" Foreground="#5B6780"/>
 
-                        <TextBlock Text="備份根目錄" Foreground="#5B6780" Margin="0,0,0,6"/>
-                        <TextBox Name="BackupRootTextBox" Height="38" Text="D:\WSL-Backups" Margin="0,0,0,14"/>
+                        <TextBlock x:Name="BackupRootLabel" Foreground="#5B6780" Margin="0,0,0,6"/>
+                        <TextBox x:Name="BackupRootTextBox" Height="38" Text="D:\WSL-Backups" Margin="0,0,0,14"/>
 
-                        <TextBlock Text="安裝根目錄" Foreground="#5B6780" Margin="0,0,0,6"/>
-                        <TextBox Name="InstallRootTextBox" Height="38" Text="D:\WSL" Margin="0,0,0,14"/>
+                        <TextBlock x:Name="InstallRootLabel" Foreground="#5B6780" Margin="0,0,0,6"/>
+                        <TextBox x:Name="InstallRootTextBox" Height="38" Text="D:\WSL" Margin="0,0,0,14"/>
 
-                        <TextBlock Text="預設備份格式" Foreground="#5B6780" Margin="0,0,0,6"/>
-                        <ComboBox Name="BackupFormatComboBox" Height="38" SelectedIndex="0" Margin="0,0,0,18">
+                        <TextBlock x:Name="BackupFormatLabel" Foreground="#5B6780" Margin="0,0,0,6"/>
+                        <ComboBox x:Name="BackupFormatComboBox" Height="38" SelectedIndex="0" Margin="0,0,0,18">
                             <ComboBoxItem Content="tar"/>
                             <ComboBoxItem Content="vhdx"/>
                         </ComboBox>
 
-                        <TextBlock Text="當前選中WSL" Foreground="#5B6780" Margin="0,0,0,6"/>
-                        <TextBox Name="SelectedDistroTextBox" Height="38" IsReadOnly="True" Margin="0,0,0,18"/>
+                        <TextBlock x:Name="SelectedDistroLabel" Foreground="#5B6780" Margin="0,0,0,6"/>
+                        <TextBox x:Name="SelectedDistroTextBox" Height="38" IsReadOnly="True" Margin="0,0,0,18"/>
 
-                        <Button Name="BackupButton" Content="立即備份" Height="40" Margin="0,0,0,10"/>
-                        <Button Name="RestoreButton" Content="還原最新備份" Height="40" Margin="0,0,0,10"/>
-                        <Button Name="OpenBackupFolderButton" Content="打開備份目錄" Height="40" Margin="0,0,0,10"/>
-                        <Button Name="OpenInstallFolderButton" Content="打開安裝目錄" Height="40"/>
+                        <Button x:Name="BackupButton" Height="40" Margin="0,0,0,10"/>
+                        <Button x:Name="RestoreButton" Height="40" Margin="0,0,0,10"/>
+                        <Button x:Name="OpenBackupFolderButton" Height="40" Margin="0,0,0,10"/>
+                        <Button x:Name="OpenInstallFolderButton" Height="40"/>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
 
+            <!-- Right: WSL list -->
             <Border Grid.Column="2" CornerRadius="18" Padding="20" Background="White" BorderBrush="#D8E0EE" BorderThickness="1">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -76,13 +80,17 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel Margin="0,0,0,14">
-                        <TextBlock Text="WSL 實例" FontSize="22" FontWeight="SemiBold" Foreground="#172033"/>
-                        <TextBlock Margin="0,8,0,0" Foreground="#5B6780" Text="點選某個 distro 後，可直接執行備份與還原。"/>
+                        <TextBlock x:Name="WslListTitle" FontSize="22" FontWeight="SemiBold" Foreground="#172033"/>
+                        <TextBlock x:Name="WslListDesc" Margin="0,8,0,0" Foreground="#5B6780"/>
                     </StackPanel>
 
-                    <DataGrid Grid.Row="1" Name="DistroGrid" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
-                              HeadersVisibility="Column" RowHeight="42" CanUserAddRows="False" BorderThickness="0"
-                              GridLinesVisibility="Horizontal" AlternatingRowBackground="#FAFBFD">
+                    <DataGrid Grid.Row="1" x:Name="DistroGrid"
+                              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single"
+                              HeadersVisibility="Column" RowHeight="42" CanUserAddRows="False"
+                              BorderThickness="0" GridLinesVisibility="Horizontal"
+                              AlternatingRowBackground="#FAFBFD"
+                              EnableRowVirtualization="True"
+                              EnableColumnVirtualization="True">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="名稱" Binding="{Binding Name}" Width="2*"/>
                             <DataGridTextColumn Header="狀態" Binding="{Binding State}" Width="*"/>
@@ -95,8 +103,9 @@
             </Border>
         </Grid>
 
+        <!-- Status bar -->
         <Border Grid.Row="2" Margin="0,16,0,0" CornerRadius="14" Padding="14" Background="White" BorderBrush="#D8E0EE" BorderThickness="1">
-            <TextBlock Name="StatusTextBlock" Text="就緒。" Foreground="#5B6780" FontSize="13" TextWrapping="Wrap"/>
+            <TextBlock x:Name="StatusTextBlock" Foreground="#5B6780" FontSize="13" TextWrapping="Wrap"/>
         </Border>
     </Grid>
 </Window>
